@@ -1,5 +1,11 @@
 import { query } from "../db/pool.js"
 
+interface HealthStatus {
+  ok: boolean;
+  database: boolean;
+  timestamp: Date;
+}
+
 export async function healthResolver() {
     let database= false;
 
@@ -14,6 +20,6 @@ export async function healthResolver() {
     return {
         ok: database,
         database,
-        Timestamp: new Date(),
+        timestamp: new Date(),
     };
 }
