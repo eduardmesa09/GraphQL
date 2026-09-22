@@ -1,0 +1,42 @@
+# ─────────── Scalars personalizados ───────────
+scalar DateTime
+scalar UUID
+scalar Money
+
+# ─────────── Vocabulario de errores ───────────
+enum ErrorCode {
+    VALIDATION
+    NOT_FOUND
+    UNAUTHORIZED
+    OUT_OF_STOCK
+    PRESCRIPTION_REQUIRED
+    PRESCRIPTION_INVALID
+    CONFLICT
+}
+
+"""
+Error de negocio esperado. NO es un error de GraphQL: la operación
+se ejecutó correctamente y su respuesta es "esto no se puede hacer,
+y este es el motivo".
+"""
+
+type UserError {
+    field: String
+    message: String!
+    code: ErrorCode!
+}
+
+# ─────────── Tipos raíz ───────────
+type HealthStatus {
+    ok: Boolean!
+    database: Boolean!
+    timestamp: DateTime!
+}
+
+type Query {
+    health: HealthStatus!
+}
+
+type Mutation {
+    _empty: String
+}

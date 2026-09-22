@@ -1,0 +1,63 @@
+"""
+A date-time string at UTC, such as 2007-12-03T10:15:30Z, compliant with the `date-time` format outlined in section 5.6 of the RFC 3339 profile of the ISO 8601 standard for representation of dates and times using the Gregorian calendar.
+"""
+scalar DateTime
+
+"""
+A field whose value is a generic Universally Unique Identifier: https://en.wikipedia.org/wiki/Universally_unique_identifier.
+"""
+scalar UUID
+
+"""
+Monto en pesos colombianos, máximo 2 decimales no negativo.pg entrega numeric como string; este escalar es el único punto de conversión
+"""
+scalar Money
+
+enum ErrorCode {
+  VALIDATION
+  NOT_FOUND
+  UNAUTHORIZED
+  OUT_OF_STOCK
+  PRESCRIPTION_REQUIRED
+  PRESCRIPTION_INVALID
+  CONFLICT
+}
+
+"""
+Error de negocio esperado. NO es un error de GraphQL: la operación
+se ejecutó correctamente y su respuesta es "esto no se puede hacer,
+y este es el motivo".
+"""
+type UserError {
+  field: String
+  message: String!
+  code: ErrorCode!
+}
+
+type HealthStatus {
+  ok: Boolean!
+  database: Boolean!
+  timestamp: DateTime!
+}
+
+type Query {
+  health: HealthStatus!
+
+  """
+  Vista condensada para el listado del catálogo (Escenario A).
+  Deliberadamente NO incluye laboratorio, indicaciones ni contraindicaciones:
+  esa información vive en la ficha detallada y traerla aquí sería over-fetching.
+  """
+  medications(limit: Int = 20): [MedicationSummary!]!
+}
+
+type Mutation {
+  _empty: String
+}
+
+type MedicationSummary {
+  id: UUID!
+  name: String!
+  price: Money!
+  presentation: String!
+}

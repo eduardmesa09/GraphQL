@@ -1,0 +1,15 @@
+extend type Query {
+    """
+    Vista condensada para el listado del catálogo (Escenario A).
+    Deliberadamente NO incluye laboratorio, indicaciones ni contraindicaciones:
+    esa información vive en la ficha detallada y traerla aquí sería over-fetching.
+    """
+    medications(limit: Int= 20): [MedicationSummary!]!
+}
+
+type MedicationSummary {
+    id: UUID!
+    name: String!
+    price: Money!
+    presentation: String!
+}
