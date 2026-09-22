@@ -11,8 +11,9 @@ del proyecto, en este orden.
 | 2 | `migrations/002_staging.sql` | Tabla temporal que refleja el CSV tal cual |
 | 3 | *(manual)* | Importar el CSV en `staging_medications` desde el Table Editor |
 | 4 | `seeds/001_medications.sql` | Normaliza staging → `categories` / `laboratories` / `medications` |
-| 5 | `verify.sql` | Comprueba conteos, joins e índices |
-| 6 | *(manual)* | `drop table staging_medications;` |
+| 5 | `migrations/003_unaccent.sql` | Búsqueda insensible a tildes (`immutable_unaccent` + índices) |
+| 6 | `verify.sql` | Comprueba conteos, joins, índices y normalización de tildes |
+| 7 | *(manual)* | `drop table staging_medications;` |
 
 ### Paso 3 en detalle
 
@@ -41,6 +42,26 @@ el join anidado — y con él la razón de existir del DataLoader. El read model
 del catálogo vive en la capa de aplicación: queries dedicadas que seleccionan
 solo las columnas pedidas, más batching por request. La proyección persistida
 se reserva para las órdenes, donde la consistencia eventual sí es real.
+
+## Búsqueda y tildes
+
+El dataset está en español (*Acetaminofén*, *Antimicóticos*, *Ácido Clavulánico*)
+pero nadie escribe tildes en un buscador. `pg_trgm` normaliza mayúsculas, pero no
+acentos, así que `name ilike '%acetaminofen%'` no encontraría nada.
+
+`003_unaccent.sql` resuelve esto con la función `immutable_unaccent(text)` y dos
+índices GIN sobre esa expresión. La regla al escribir resolvers es una sola:
+
+```sql
+where immutable_unaccent(m.name) ilike immutable_unaccent('%' || $1 || '%')
+```
+
+**Ambos lados normalizados.** Si solo se normaliza el patrón, el índice deja de
+aplicar y la búsqueda sigue fallando con tildes.
+
+La función existe porque `unaccent()` de un solo argumento no es `IMMUTABLE` y
+Postgres solo indexa expresiones inmutables; la forma de dos argumentos con un
+`regdictionary` explícito sí es determinista.
 
 ## Conexión
 
