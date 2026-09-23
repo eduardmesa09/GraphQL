@@ -1,0 +1,36 @@
+type Patient {
+    id: UUID!
+    email: String!
+    fullName: String!
+}
+
+"""
+Resultado de una operación de autenticación.
+Si `errors` viene con elementos, `token` y `patient` son null.
+"""
+type AuthPayload {
+    token: String
+    patient: Patient
+    errors: [UserError!]!
+}
+
+input RegisterPatientInput {
+    email: String!
+    fullName: String!
+    password: String!
+}
+
+input LoginInput {
+    email: String!
+    password: String!
+}
+
+extend type Mutation {
+    registerPatient(input: RegisterPatientInput!): AuthPayload!
+    login(input: LoginInput!): AuthPayload!
+}
+
+extend type Query {
+    "Paciente de la sesión actual. Null si no hay token válido."
+    me: Patient
+}

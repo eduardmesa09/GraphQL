@@ -43,25 +43,229 @@ type HealthStatus {
 type Query {
   health: HealthStatus!
 
-  """
-  Vista condensada para el listado del catálogo (Escenario A).
-  Deliberadamente NO incluye laboratorio, indicaciones ni contraindicaciones:
-  esa información vive en la ficha detallada y traerla aquí sería over-fetching.
-  """
-  medications(limit: Int = 20): [MedicationSummary!]!
+  """Búsqueda paginada del catálogo. Máximo 100 resultados por página."""
+  medications(filter: MedicationFilter, limit: Int = 20, offset: Int = 0): MedicationPage!
+
+  """Ficha de un medicamento. Devuelve null si el id no existe."""
+  medication(id: UUID!): Medication
+  categories: [Category!]!
+
+  """Paciente de la sesión actual. Null si no hay token válido."""
+  me: Patient
+
+  """Órdenes del paciente autenticado, desde el modelo de lectura."""
+  myOrders(limit: Int = 20, offset: Int = 0): OrderPage!
+
+  """Proyección de una orden. Null si no existe o no pertenece al paciente."""
+  order(id: UUID!): Order
 }
 
 type Mutation {
   _empty: String
+  registerPatient(input: RegisterPatientInput!): AuthPayload!
+  login(input: LoginInput!): AuthPayload!
+
+  """Comando de compra: valida recetas, reserva stock y crea la orden."""
+  placeOrder(input: PlaceOrderInput!): PlaceOrderPayload!
+
+  """Revisión farmacéutica: valida las fórmulas y aprueba la orden."""
+  validatePrescription(orderId: UUID!): OrderStatusPayload!
+
+  """Marca la orden como despachada."""
+  dispatchOrder(orderId: UUID!): OrderStatusPayload!
+
+  """Cancela la orden y devuelve el inventario reservado."""
+  cancelOrder(orderId: UUID!): OrderStatusPayload!
 }
 
 type Subscription {
   _empty: String
+
+  """
+  Emite la proyección actualizada cada vez que la orden cambia de estado.
+  """
+  orderStatusChanged(orderId: UUID!): Order!
 }
 
-type MedicationSummary {
-  id: UUID!
+"""Categoría terapéutica (Analgésicos, Antibióticos, Cardiovascular...)."""
+type Category {
+  id: ID!
   name: String!
-  price: Money!
+
+  """
+  Medicamentos de esta categoría.
+  Relación 1:N resuelta por lotes: N categorías -> una sola consulta.
+  """
+  medications: [Medication!]!
+}
+
+type Laboratory {
+  id: ID!
+  name: String!
+}
+
+"""
+Medicamento del catálogo. Un único tipo para el listado y la ficha:
+la "vista condensada" es una selección de campos que hace el cliente,
+no un tipo aparte.
+"""
+type Medication {
+  id: UUID!
+  sku: String!
+  name: String!
+  activeIngredient: String!
+  dosage: String!
   presentation: String!
+  price: Money!
+
+  """
+  Unidades en bodega, a título informativo. La disponibilidad real la
+  valida el comando de compra en el momento de ordenar (CQRS): este valor
+  puede estar desactualizado.
+  """
+  stock: Int!
+  requiresPrescription: Boolean!
+  description: String
+
+  """Relación N:1, resuelta por lotes."""
+  category: Category!
+
+  """Relación N:1, resuelta por lotes."""
+  laboratory: Laboratory!
+}
+
+"""
+Criterios de búsqueda del catálogo. Todos opcionales y combinables (AND).
+"""
+input MedicationFilter {
+  """
+  Busca en nombre comercial, principio activo y categoría. Ignora tildes y mayúsculas.
+  """
+  search: String
+  categoryId: ID
+  requiresPrescription: Boolean
+}
+
+type MedicationPage {
+  items: [Medication!]!
+  totalCount: Int!
+  hasMore: Boolean!
+}
+
+type Patient {
+  id: UUID!
+  email: String!
+  fullName: String!
+}
+
+"""
+Resultado de una operación de autenticación.
+Si `errors` viene con elementos, `token` y `patient` son null.
+"""
+type AuthPayload {
+  token: String
+  patient: Patient
+  errors: [UserError!]!
+}
+
+input RegisterPatientInput {
+  email: String!
+  fullName: String!
+  password: String!
+}
+
+input LoginInput {
+  email: String!
+  password: String!
+}
+
+enum OrderStatus {
+  PENDING_APPROVAL
+  APPROVED
+  DISPATCHED
+  CANCELLED
+}
+
+"""
+Línea de una orden tal y como quedó en la proyección.
+`unitPrice` es el precio congelado al momento de comprar: si el catálogo
+sube de precio mañana, esta orden no cambia.
+"""
+type OrderItem {
+  medicationId: UUID!
+  name: String!
+  presentation: String!
+  quantity: Int!
+  unitPrice: Money!
+  lineTotal: Money!
+}
+
+"""
+Vista de una orden. Se sirve desde `read_model.order_projections`, NO desde
+las tablas transaccionales: es el modelo de lectura del patrón CQRS.
+"""
+type Order {
+  id: UUID!
+  status: OrderStatus!
+  total: Money!
+  itemCount: Int!
+  items: [OrderItem!]!
+
+  """Hay fórmulas médicas esperando revisión farmacéutica."""
+  pendingPrescriptions: Boolean!
+  placedAt: DateTime!
+
+  """
+  Momento en que se reconstruyó esta proyección. Comparado con `placedAt`
+  mide el desfase de la consistencia eventual.
+  """
+  projectedAt: DateTime!
+}
+
+type OrderPage {
+  items: [Order!]!
+  totalCount: Int!
+  hasMore: Boolean!
+}
+
+input OrderItemInput {
+  medicationId: UUID!
+  quantity: Int!
+}
+
+"""Soporte de fórmula médica para un medicamento de venta bajo receta."""
+input PrescriptionInput {
+  medicationId: UUID!
+  doctorName: String!
+  doctorLicense: String!
+  issuedAt: String!
+  documentUrl: String
+}
+
+input PlaceOrderInput {
+  items: [OrderItemInput!]!
+  prescriptions: [PrescriptionInput!] = []
+}
+
+"""
+Respuesta del comando de compra.
+
+`order` puede venir null aunque la orden se haya creado: la proyección es
+eventualmente consistente. `orderId` y `status` salen del modelo de escritura
+y están disponibles de inmediato, así que el cliente siempre tiene con qué
+pintar un estado optimista.
+"""
+type PlaceOrderPayload {
+  orderId: UUID
+  status: OrderStatus
+  total: Money
+  order: Order
+  errors: [UserError!]!
+}
+
+type OrderStatusPayload {
+  orderId: UUID
+  status: OrderStatus
+  order: Order
+  errors: [UserError!]!
 }

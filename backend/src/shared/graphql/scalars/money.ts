@@ -4,7 +4,7 @@ import { GraphQLScalarType, Kind, GraphQLError } from "graphql";
  * Normaliza cualquier entrada a un número de pesos con máximo 2 decimales.
  * pg entrega `numeric` como string ("9500.00"), el cliente envía number.
  */
-function toMoney(input: unknown, origen: String): number {
+function toMoney(input: unknown, origen: string): number {
     let n: number;
 
     if (typeof input === "string") {
@@ -12,6 +12,9 @@ function toMoney(input: unknown, origen: String): number {
             throw new GraphQLError(`Money (${origen}): cadena vacía`);
         }
         n= Number(input);
+
+    }else if (typeof input === "number") {
+        n= input;
 
     }else {
         throw new GraphQLError(

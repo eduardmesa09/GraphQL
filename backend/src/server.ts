@@ -6,7 +6,8 @@ const port= Number(process.env.PORT ?? 4000);
 const { httpServer, apollo } = await createApp();
 
 httpServer.listen(port, () => {
-    console.log(`[server] GraphQL listo en http://localhost:${port}/graphql`)
+    console.log(`[server] GraphQL   http://localhost:${port}/graphql`);
+    console.log(`[server] WebSocket ws://localhost:${port}/graphql`)
 });
 
 async function shutdown(signal: string) {

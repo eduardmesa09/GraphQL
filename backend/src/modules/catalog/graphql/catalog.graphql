@@ -1,15 +1,76 @@
-extend type Query {
+"""
+Categoría terapéutica (Analgésicos, Antibióticos, Cardiovascular...).
+"""
+
+type Category {
+    id: ID!
+    name: String!
+    
     """
-    Vista condensada para el listado del catálogo (Escenario A).
-    Deliberadamente NO incluye laboratorio, indicaciones ni contraindicaciones:
-    esa información vive en la ficha detallada y traerla aquí sería over-fetching.
+    Medicamentos de esta categoría.
+    Relación 1:N resuelta por lotes: N categorías -> una sola consulta.
     """
-    medications(limit: Int= 20): [MedicationSummary!]!
+    medications: [Medication!]!
 }
 
-type MedicationSummary {
-    id: UUID!
+type Laboratory {
+    id: ID!
     name: String!
-    price: Money!
+}
+
+"""
+Medicamento del catálogo. Un único tipo para el listado y la ficha:
+la "vista condensada" es una selección de campos que hace el cliente,
+no un tipo aparte.
+"""
+type Medication {
+    id: UUID!
+    sku: String!
+    name: String!
+    activeIngredient: String!
+    dosage: String!
     presentation: String!
+    price: Money!
+    
+    """
+    Unidades en bodega, a título informativo. La disponibilidad real la
+    valida el comando de compra en el momento de ordenar (CQRS): este valor
+    puede estar desactualizado.
+    """
+    stock: Int!
+
+    requiresPrescription: Boolean!
+    description: String
+
+    "Relación N:1, resuelta por lotes."
+    category: Category!
+
+    "Relación N:1, resuelta por lotes."
+    laboratory: Laboratory!        
+}
+
+"""
+Criterios de búsqueda del catálogo. Todos opcionales y combinables (AND).
+"""
+input MedicationFilter {
+    "Busca en nombre comercial, principio activo y categoría. Ignora tildes y mayúsculas."
+    search: String
+    categoryId: ID
+    requiresPrescription: Boolean
+}
+
+type MedicationPage {
+    items: [Medication!]!
+    totalCount: Int!
+    hasMore: Boolean!
+}
+
+extend type Query {
+    "Búsqueda paginada del catálogo. Máximo 100 resultados por página."
+    medications(filter: MedicationFilter, limit: Int= 20, offset: Int= 0): MedicationPage!
+
+    "Ficha de un medicamento. Devuelve null si el id no existe."
+    medication(id: UUID!): Medication
+
+    categories: [Category!]!
 }
